@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dynamic Distance Calculator</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <style>
+    /* Reset and base */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 30px 20px;
+      background: #f0f4f8;
+      color: #2c3e50;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h2 {
+      color: #34495e;
+      margin-bottom: 0.5rem;
+      font-weight: 700;
+      font-size: 1.9rem;
+    }
+    #status {
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #2980b9;
+      min-height: 1.5em;
+      user-select: none;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background: white;
+      padding: 20px 25px 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    #coords {
+      width: 100%;
+      height: 140px;
+      font-family: monospace;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 1rem;
+      resize: vertical;
+      transition: border-color 0.3s ease;
+    }
+    #coords:focus {
+      border-color: #2980b9;
+      outline: none;
+      box-shadow: 0 0 8px rgba(41, 128, 185, 0.3);
+    }
+
+    #userId {
+      width: 100%;
+      margin-top: 15px;
+      padding: 12px 15px;
+      font-size: 1rem;
+      border: 1.5px solid #ccc;
+      border-radius: 8px;
+      transition: border-color 0.3s ease;
+    }
+    #userId:focus {
+      border-color: #2980b9;
+      outline: none;
+      box-shadow: 0 0 8px rgba(41, 128, 185, 0.3);
+    }
+
+    #map {
+      height: 480px;
+      margin-top: 25px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+      border: none;
+    }
+
+    #response {
+      margin-top: 25px;
+      font-size: 1rem;
+      color: #34495e;
+      min-height: 2.2em;
+      user-select: none;
+    }
+
+    /* Table styling */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px 18px;
+      text-align: left;
+    }
+    th {
+      background-color: #2980b9;
+      color: white;
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+    td {
+      background: #ecf0f1;
+      font-weight: 500;
+      font-size: 1rem;
+    }
+
+    /* Add Pin Button */
+    .leaflet-control button {
+      background-color: #2980b9 !important;
+      color: white !important;
+      font-weight: 700 !important;
+      font-size: 1.15rem !important;
+      border-radius: 8px !important;
+      padding: 8px 18px !important;
+      border: none !important;
+      box-shadow: 0 4px 8px rgba(41, 128, 185, 0.4) !important;
+      transition: background-color 0.25s ease;
+      cursor: pointer !important;
+      user-select: none !important;
+    }
+    .leaflet-control button:hover {
+      background-color: #1c5980 !important;
+      box-shadow: 0 6px 12px rgba(28, 89, 128, 0.7) !important;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+      body {
+        padding: 15px 10px;
+      }
+      .container {
+        padding: 15px 15px 20px;
+      }
+      #coords {
+        height: 120px;
+      }
+      #map {
+        height: 320px;
+        margin-top: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>🗺️ Add Pins & Calculate Distance</h2>
+  <p id="status">Connecting...</p>
+  <div class="container">
+    <textarea
+      id="coords"
+      placeholder="Click ➕ Add New Pin to start..."
+      >[]</textarea
+    >
+    <input
+      type="text"
+      id="userId"
+      placeholder="Enter userId"
+      value="66355c12b7a12ceff416ec80"
+    />
+    <div id="map"></div>
+    <div id="response"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+//  const socket = io("http://localhost:3000", {
+//       path: "/socket/calculateDistance",
+//     });
+const socket = io("http://localhost:3000/calculateDistance", {
+      path: "/socket",
+      transports: ["websocket"]
+    });
+    socket.on("connect", () => {
+        console.log("Client connected:", socket.id);
+      document.getElementById("status").innerText = "✅ Connected: " + socket.id;
+    });
+
+    socket.on("disconnect", () => {
+      document.getElementById("status").innerText = "⚠️ Disconnected";
+    });
+
+    socket.on("connect_error", (err) => {
+      document.getElementById("status").innerText = "❌ Connection Error";
+      console.error(err.message);
+    });
+
+    const coordsEl = document.getElementById("coords");
+    const responseEl = document.getElementById("response");
+
+    // Initialize map centered on New Delhi, India
+    const map = L.map("map").setView([28.6139, 77.209], 6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+    let markers = [];
+    let polyline = null;
+
+    function drawLines(coordsArray) {
+      if (polyline) map.removeLayer(polyline);
+      const latLngs = coordsArray.map((c) => [c.latitude, c.longitude]);
+      polyline = L.polyline(latLngs, { color: "blue" }).addTo(map);
+    }
+
+    function updateMapPins(coordsArray) {
+      markers.forEach((m) => map.removeLayer(m));
+      markers = [];
+
+      coordsArray.forEach((coord, idx) => {
+        const marker = L.marker([coord.latitude, coord.longitude], {
+          draggable: true,
+        }).addTo(map);
+        marker
+          .bindPopup(
+            `Lat: ${coord.latitude.toFixed(5)}<br>Lng: ${coord.longitude.toFixed(
+              5
+            )}`
+          )
+          .openPopup();
+
+        marker.on("dragend", () => {
+          const { lat, lng } = marker.getLatLng();
+          coordsArray[idx] = { latitude: lat, longitude: lng };
+          marker
+            .setPopupContent(
+              `Lat: ${lat.toFixed(5)}<br>Lng: ${lng.toFixed(5)}`
+            )
+            .openPopup();
+          coordsEl.value = JSON.stringify(coordsArray, null, 2);
+          drawLines(coordsArray);
+          sendCoordinates(coordsArray);
+        });
+
+        markers.push(marker);
+      });
+
+      if (markers.length > 0) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.5));
+      }
+
+      drawLines(coordsArray);
+    }
+
+    function sendCoordinates(coords = null) {
+      const userId = document.getElementById("userId").value.trim();
+      let coordsArray;
+
+      if (!coords) {
+        try {
+          coordsArray = JSON.parse(coordsEl.value.trim());
+        } catch {
+          responseEl.innerText = "❌ Invalid JSON format";
+          return;
+        }
+      } else {
+        coordsArray = coords;
+      }
+
+      if (!Array.isArray(coordsArray) || coordsArray.length < 2) {
+        responseEl.innerText = "❌ At least 2 coordinates required";
+        return;
+      }
+
+      const valid = coordsArray.every(
+        (c) =>
+          typeof c.latitude === "number" && typeof c.longitude === "number"
+      );
+      if (!valid) {
+        responseEl.innerText = "❌ Invalid coordinate format";
+        return;
+      }
+
+      responseEl.innerText = "⏳ Calculating distance...";
+      socket.emit("calculateDistance", { userId, coordinates: coordsArray });
+    }
+
+    coordsEl.addEventListener("input", () => {
+      try {
+        const coords = JSON.parse(coordsEl.value.trim());
+        updateMapPins(coords);
+        sendCoordinates(coords);
+      } catch {
+        responseEl.innerText = "❌ Invalid JSON";
+      }
+    });
+
+    socket.on("distanceResult", ({ data }) => {
+      if (!data) {
+        responseEl.innerText = "❌ No data returned.";
+        return;
+      }
+
+      let table = `<h3>📏 Distance Details</h3><table><thead><tr><th>Unit</th><th>Value</th></tr></thead><tbody>`;
+      for (const key in data) {
+        table += `<tr><td>${key}</td><td>${data[key].toLocaleString()}</td></tr>`;
+      }
+      table += `</tbody></table>`;
+      responseEl.innerHTML = table;
+    });
+
+    function addNewPin() {
+      try {
+        const coords = JSON.parse(coordsEl.value.trim()) || [];
+        let newCoord;
+
+        if (coords.length > 0) {
+          const last = coords[coords.length - 1];
+          newCoord = {
+            latitude: last.latitude + 0.05,
+            longitude: last.longitude + 0.05,
+          };
+        } else {
+          newCoord = { latitude: 28.6139, longitude: 77.209 }; // Default start New Delhi
+        }
+
+        coords.push(newCoord);
+        coordsEl.value = JSON.stringify(coords, null, 2);
+        updateMapPins(coords);
+        sendCoordinates(coords);
+      } catch {
+        coordsEl.value = JSON.stringify([{ latitude: 28.6139, longitude: 77.209 }], null, 2);
+        updateMapPins([{ latitude: 28.6139, longitude: 77.209 }]);
+        sendCoordinates([{ latitude: 28.6139, longitude: 77.209 }]);
+      }
+    }
+
+    // Add "Add New Pin" button on map top-right
+    L.Control.AddPin = L.Control.extend({
+      onAdd: function (map) {
+        const btn = L.DomUtil.create("button", "");
+        btn.title = "Add New Pin";
+        btn.innerText = "➕ Add New Pin";
+
+        btn.onclick = (e) => {
+          e.preventDefault();
+          addNewPin();
+        };
+
+        return btn;
+      },
+      onRemove: function (map) {},
+    });
+    L.control.addPin = function (opts) {
+      return new L.Control.AddPin(opts);
+    };
+    L.control.addPin({ position: "topright" }).addTo(map);
+
+    // Initialize with empty array
+    coordsEl.value = "[]";
+  </script>
+</body>
+</html>
