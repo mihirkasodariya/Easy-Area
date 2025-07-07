@@ -10,6 +10,7 @@ connectDB();
 
 const distanceHandler = require("./src/router/distanceRoutes");
 const areaHandler = require("./src/router/convertRoute");
+const waypointsHandler = require("./src/router/waypointsRoutes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -50,6 +51,25 @@ areaNamespace.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("📐 [Area] disconnected:", socket.id);
   });
+});
+
+const waypointsNamespace = io.of("/waypoints");
+waypointsNamespace.on("connection", (socket) => {
+  console.log("📐 [waypoints] connected:", socket.id);
+  waypointsHandler(socket);
+  socket.on("disconnect", () => {
+    console.log("📐 [Area] disconnected:", socket.id);
+  });
+});
+
+app.get('/areaMeasuring', (req, res) => {
+  res.sendFile(path.join(__dirname, 'areaMeasuring.html'));
+});
+app.get('/calculateDistance', (req, res) => {
+  res.sendFile(path.join(__dirname, 'calculateDistance.html'));
+});
+app.get('/waypoints', (req, res) => {
+  res.sendFile(path.join(__dirname, 'waypoints.html'));
 });
 
 server.listen(port, () => {

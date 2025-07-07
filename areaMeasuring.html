@@ -254,13 +254,13 @@
 
     socket.on("connect", () => {
       statusEl.textContent = "✅ Socket.IO connected.";
-   
 
-    socket.on("areaResult", (data) => {
-      socketResponseEl.textContent = JSON.stringify(data.data, null, 2);
-      statusEl.textContent = "📦 Area result received from backend.";
+      socket.on("areaResult", (data) => {
+        socketResponseEl.textContent = JSON.stringify(data.data, null, 2);
+        statusEl.textContent = "📦 Area result received from backend.";                                                         
+      });
     });
- });
+    
     socket.on("disconnect", () => {
       statusEl.textContent = "❌ Socket.IO disconnected.";
     });

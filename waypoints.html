@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>POI Waypoints Distance</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: sans-serif;
+    }
+    #map {
+      height: 85vh;
+      width: 100%;
+    }
+    h2, p, button {
+      text-align: center;
+      margin: 10px;
+    }
+    button {
+      padding: 6px 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>POI Waypoints Distance Calculator</h2>
+  <p id="distance">Click on the map to add POIs (minimum 2 points).</p>
+  <div style="text-align: center;"><button onclick="resetMap()">Reset</button></div>
+  <div id="map"></div>
+
+  <script>
+    const socket = io("http://localhost:3000/waypoints", {
+      path: "/socket",
+      transports: ["websocket"]
+    });
+
+    socket.on("connect", () => {
+      console.log("✅ Connected to /waypoints:", socket.id);
+    });
+
+    socket.on("waypointsResult", (data) => {
+      console.log("📏 Distance from server:", data);
+      if (data.success) {
+        document.getElementById("distance").innerText =
+          `🛣️ Total Distance: ${data.data.distanceInMeters.toFixed(2)} meters`;
+        drawRoute(data.data.waypoints);
+      } else {
+        document.getElementById("distance").innerText = `❌ Error: ${data.message}`;
+      }
+    });
+
+    const map = L.map("map").setView([22.9734, 78.6569], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    let markers = [];
+    let waypoints = [];
+    let routeLine;
+
+    map.on("click", (e) => {
+      const { lat, lng } = e.latlng;
+
+      const marker = L.marker([lat, lng])
+        .addTo(map)
+        .bindPopup(`Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`)
+        .openPopup();
+
+      markers.push(marker);
+      waypoints.push({ latitude: lat, longitude: lng });
+
+      if (waypoints.length >= 2) {
+        socket.emit("handleCalculateDistance", { waypoints });
+      }
+    });
+
+    function drawRoute(points) {
+      if (routeLine) map.removeLayer(routeLine);
+
+      const latlngs = points.map(p => [p.latitude, p.longitude]);
+      routeLine = L.polyline(latlngs, { color: 'blue' }).addTo(map);
+      map.fitBounds(routeLine.getBounds());
+    }
+
+    function resetMap() {
+      markers.forEach(m => map.removeLayer(m));
+      if (routeLine) map.removeLayer(routeLine);
+      markers = [];
+      waypoints = [];
+      document.getElementById("distance").innerText = "Click on the map to add POIs (minimum 2 points).";
+    }
+  </script>
+</body>
+</html>
